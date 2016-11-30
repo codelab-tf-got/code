@@ -23,6 +23,19 @@ import pandas as pd
 import tensorflow as tf
 
 
+## Begin set up logging
+import logging
+
+logger = logging.getLogger('net_mk1')
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+## End set up logging
+
+
 # Get some useful information from TensorFlow's internals
 # tf.logging.set_verbosity(tf.logging.WARN)
 tf.logging.set_verbosity(tf.logging.INFO)
