@@ -59,111 +59,103 @@ flags.DEFINE_string(
     "",
     "Path to the test data.")
 
-## Columns define all columns of the data set 
-COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,dateOfDeath,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
+flags.DEFINE_float("wide_learning_rate", 0.001, "learning rate for the wide part of the model")
+flags.DEFINE_float("deep_learning_rate", 0.003, "learning rate for the deep part of the model")
 
-# Define the target column to predict
-# PLOD: Percentage Likelyhood of Death
-# c.f. https://got.show/machine-learning-algorithm-predicts-death-game-of-thrones
-LABEL_COLUMN = "plod"
+learning_rate = [FLAGS.wide_learning_rate, FLAGS.deep_learning_rate]
+model_name = "net_mk1"
 
-CATEGORICAL_COLUMNS = ["isAlive", "title", "male", "culture",
-                       "house", "spouse", "isAliveMother", "isAliveFather", "isAliveHeir",
-                       "isAliveSpouse", "isMarried", "isNoble", "numDeadRelations",
-                       "boolDeadRelations", "isPopular" , "popularity"]
-CONTINUOUS_COLUMNS = ["name", "dateOfBirth", "dateOfDeath", "mother", "father",
-                      "heir", "book1", "book2", "book3", "book4", "book5",
-                      "house", "title", "numDeadRelations"]
+
+
+# Target column is plod, for Percentage Likelyhood Of Death
+LABEL_COLUMN = b'plod'
+
+# The columns in the dataset are the following:
+COLUMNS = b'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,dateOfDeath,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
+COLUMNS_X = [col for col in COLUMNS if col != LABEL_COLUMN]
 
 dataset_file_name = "../dataset/character-predictions.csv"
 
+df_base = pd.read_csv(dataset_file_name, sep=',',) # names=COLUMNS, skipinitialspace=True, skiprows=1)
+
+CATEGORICAL_COLUMN_NAMES = [
+    'male',
+    'culture',
+    'mother',
+    'father',
+    'title',
+    'heir',
+    'house',
+    'spouse',
+    'numDeadRelations',
+    'boolDeadRelations',
+]
+
+BINARY_COLUMNS = [
+    'book1',
+    'book2',
+    'book3',
+    'book4',
+    'book5',
+    'isAliveMother',
+    'isAliveFather',
+    'isAliveHeir',
+    'isAliveSpouse',
+    'isMarried',
+    'isNoble',
+    'isPopular',
+]
+
+BUCKETIZED_COLUMNS_FILTER = ['age']
+
+CATEGORICAL_COLUMNS = {
+    col: len(df_base[col].unique()) + 1
+    for col in CATEGORICAL_COLUMN_NAMES
+}
+
+# TODO: Revise bins for GoT
+AGE_BINS = [ 0, 4, 8, 15, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 80, 65535 ]
+
+CONTINUOUS_COLUMNS = [
+    'age',
+    'isNoble',
+    'popularity',
+    'dateOfBirth',
+]
+
+
+X = df_base[COLUMNS]
+y = df_base[LABEL_COLUMN]
+
+df_train, df_test, y_train, y_test = cross_validation.train_test_split(X, y, test_size=0.2, random_state=42)
+
+LABEL_COLUMN_CLASSES = y.unique()
+
+dataset_file_name = "../dataset/character-predictions.csv"
+
+
 def build_estimator(model_dir):
   """Build an estimator."""
-  # Sparse base columns.
-  title = tf.contrib.layers.sparse_column_with_hash_bucket(
-      "title", hash_bucket_size=10)
-  culture = tf.contrib.layers.sparse_column_with_hash_bucket(
-      "culture", hash_bucket_size=10)
-  house = tf.contrib.layers.sparse_column_with_hash_bucket(
-      "house", hash_bucket_size=10)
-  spouse = tf.contrib.layers.sparse_column_with_hash_bucket(
-      "spouse", hash_bucket_size=100)
-  male = tf.contrib.layers.sparse_column_with_keys(column_name="male",
-                                                     keys=["0", "1"])
-  isAliveMother = tf.contrib.layers.sparse_column_with_keys(column_name="isAliveMother",
-                                                     keys=["0", "1"])
-  isAliveFather = tf.contrib.layers.sparse_column_with_keys(column_name="isAliveFather",
-                                                     keys=["0", "1"])
-  isAliveHeir = tf.contrib.layers.sparse_column_with_keys(column_name="isAliveHeir",
-                                                     keys=["0", "1"])  
-  isAliveSpouse = tf.contrib.layers.sparse_column_with_keys(column_name="isAliveSpouse",
-                                                     keys=["0", "1"])
-  isMarried = tf.contrib.layers.sparse_column_with_keys(column_name="isMarried",
-                                                     keys=["0", "1"])
-  isNoble = tf.contrib.layers.sparse_column_with_keys(column_name="isNoble",
-                                                     keys=["0", "1"])
-  isAlive = tf.contrib.layers.sparse_column_with_keys(column_name="isAlive",
-                                                     keys=["0", "1"])
-  isNoble = tf.contrib.layers.sparse_column_with_keys(column_name="isNoble",
-                                                     keys=["0", "1"])
-  isPopular = tf.contrib.layers.sparse_column_with_keys(column_name="isPopular",
-                                                     keys=["0", "1"])
 
-  numDeadRelations = tf.contrib.layers.sparse_column_with_hash_bucket(
-      "numDeadRelations", hash_bucket_size=10)
-  boolDeadRelations = tf.contrib.layers.sparse_column_with_hash_bucket(
-      "boolDeadRelations", hash_bucket_size=10)
-  popularity = tf.contrib.layers.sparse_column_with_hash_bucket(
-      "popularity", hash_bucket_size=100)
+  # Get the number of continuous columns
+  n_cc = len(CONTINUOUS_COLUMNS)
+  n_categories = 1 # two categories: is_alive and is_not_alive
+  input_shape = [None, n_cc]
 
-  # Continuous base columns.
-  name = tf.contrib.layers.real_valued_column("name")
-  dateOfBirth = tf.contrib.layers.real_valued_column("dateOfBirth")
-  dateOfDeath = tf.contrib.layers.real_valued_column("dateOfDeath")
-  mother = tf.contrib.layers.real_valued_column("mother")
-  father = tf.contrib.layers.real_valued_column("father")
-  heir = tf.contrib.layers.real_valued_column("heir")
-  book1 = tf.contrib.layers.real_valued_column("book1")
-  book2 = tf.contrib.layers.real_valued_column("book2")  
-  book3 = tf.contrib.layers.real_valued_column("book3")
-  book4 = tf.contrib.layers.real_valued_column("book4")
-  book5 = tf.contrib.layers.real_valued_column("book5")
-  # age = tf.contrib.layers.real_valued_column("age")
-  # 
-  # age_buckets = tf.contrib.layers.bucketized_column(age,
-  #                                                   boundaries=[
-  #                                                       18, 25, 30, 35, 40, 45,
-  #                                                       50, 55, 60, 65
-  #                                                   ])
-  ##Crossed clomuns come in pairs or can I combined more??
-  # Wide columns and deep columns.
-  wide_columns = [name, dateOfBirth, dateOfDeath, mother, father, heir, book1, book2,
-                  book3, book4, book5, isAlive,
-                  # tf.contrib.layers.crossed_column([house, title],
-                  #                                  hash_bucket_size=int(1e4)),
-                  # tf.contrib.layers.crossed_column(
-                  #     [age_buckets, house, title],
-                  #     hash_bucket_size=int(1e6)),
-                  # tf.contrib.layers.crossed_column([numDeadRelations, title],
-                  #                                  hash_bucket_size=int(1e4))
-  ]
-  ##How do I choose the dimensions here?
-  ##Do i put all the categorical columns here? 
-  deep_columns = [
-      tf.contrib.layers.embedding_column(title, dimension=8),
-      tf.contrib.layers.embedding_column(house, dimension=8),
-      tf.contrib.layers.embedding_column(culture, dimension=8),
-      tf.contrib.layers.embedding_column(isNoble, dimension=8),
-      tf.contrib.layers.embedding_column(isAlive, dimension=8),
-      tf.contrib.layers.embedding_column(numDeadRelations,
-                                         dimension=8),
-      tf.contrib.layers.embedding_column(popularity, dimension=8),
-      male,
-      spouse,
-      isPopular,
-      isMarried,
-  ]
-##From here, reading the code beyond i've change anything from the tutorial 
+  logger.debug("Input placeholder shape = %s", str (input_shape))
+
+  with tf.name_scope("wide_inputs"):
+    wide_inputs = tf.placeholder(shape=input_shape, dtype=tf.float32, name="X")
+
+  logger.info("Learning rates (wide, deep) = %s", learning_rate)
+
+  with tf.name_scope("Y"):
+    Y_in = tf.placeholder(shape=[None, 1], dtype=tf.float32, name="Y")
+
+  wide_columns = get_wide_columns()
+  deep_columns = get_deep_columns()
+
+  ##From here, reading the code beyond i've change anything from the tutorial 
   if FLAGS.model_type == "wide":
     m = tf.contrib.learn.LinearClassifier(model_dir=model_dir,
                                           feature_columns=wide_columns)
@@ -180,6 +172,41 @@ def build_estimator(model_dir):
   return m
 
 
+def get_deep_columns():
+  cc_input_var = {}
+  cc_embed_var = {}
+  cols = []
+
+  for cc in BINARY_COLUMNS:
+    cols.append(
+      tf.contrib.layers.sparse_column_with_keys(column_name=cc,
+                                                            keys=["0", "1"])
+    )
+
+  
+  for cc, cc_size in CATEGORICAL_COLUMNS.items():
+    cc_input_var[cc] = tf.contrib.layers.sparse_column_with_hash_bucket(
+      cc,
+      hash_bucket_size=cc_size,
+    )
+
+    cols.append(tf.squeeze(cc_input_var[cc], squeeze_dims=[1]))
+
+    # with tf.scope_name('%s_in' % cc):
+    #   cc_input_var[cc] = tf.placeholder(shape=[None, 1], dtype=tf.int32)
+    # cc_embed_var[cc] = tflearn.layers.embedding_ops.embedding(cc_input_var[cc], cc_size, 10, name='deep_%s_embed' % cc)
+    # logger.debug("%s_embed = %s", cc, cc_embed_var)
+    # 
+    # cols.append(tf.squeeze(cc_embed_var[cc], squeeze_dims=[1], name="%s_squeeze" % cc))
+
+  # age_buckets = tf.contrib.layers.bucketized_column(age,
+  #                                                   boundaries=[
+  #                                                       18, 25, 30, 35, 40, 45,
+  #                                                       50, 55, 60, 65
+  #                                                   ])
+  ##Crossed clomuns come in pairs or can I combined more??
+
+  return cols
 
 def get_wide_columns():
   cols = []
