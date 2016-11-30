@@ -180,6 +180,15 @@ def build_estimator(model_dir):
   return m
 
 
+
+def get_wide_columns():
+  cols = []
+  for column in CONTINUOUS_COLUMNS:
+    cols.append(tf.contrib.layers.real_valued_column(column))
+
+  return cols
+
+
 def input_fn(df):
   """Input builder function."""
   # Creates a dictionary mapping from each continuous feature column name (k) to
