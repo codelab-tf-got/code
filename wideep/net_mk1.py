@@ -117,10 +117,9 @@ CATEGORICAL_COLUMNS = {
 AGE_BINS = [ 0, 4, 8, 15, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 80, 65535 ]
 
 CONTINUOUS_COLUMNS = [
-    'age',
-    'isNoble',
-    'popularity',
-    'dateOfBirth',
+  'isNoble',
+  'popularity',
+  'dateOfBirth',
 ]
 
 UNUSED_COLUMNS = [
@@ -142,20 +141,7 @@ dataset_file_name = "../dataset/character-predictions.csv"
 def build_estimator(model_dir):
   """Build an estimator."""
 
-  # Get the number of continuous columns
-  n_cc = len(CONTINUOUS_COLUMNS)
-  n_categories = 1 # two categories: is_alive and is_not_alive
-  input_shape = [None, n_cc]
-
-  logger.debug("Input placeholder shape = %s", str (input_shape))
-
-  with tf.name_scope("wide_inputs"):
-    wide_inputs = tf.placeholder(shape=input_shape, dtype=tf.float32, name="X")
-
   logger.info("Learning rates (wide, deep) = %s", learning_rate)
-
-  with tf.name_scope("Y"):
-    Y_in = tf.placeholder(shape=[None, 1], dtype=tf.float32, name="Y")
 
   wide_columns = get_wide_columns()
   deep_columns = get_deep_columns()
@@ -177,10 +163,12 @@ def build_estimator(model_dir):
   return m
 
 
+age_column = tf.contrib.layers.real_valued_column('age', dimension=1, dtype=tf.int32)
+
 def get_deep_columns():
   cc_input_var = {}
   cc_embed_var = {}
-  cols = []
+  cols = [] + [age_column]
 
   for cc in BINARY_COLUMNS:
     cols.append(
@@ -194,7 +182,8 @@ def get_deep_columns():
       hash_bucket_size=cc_size,
     )
 
-    cols.append(tf.squeeze(cc_input_var[cc], squeeze_dims=[1]))
+    cols.append(cc_input_var[cc])
+    # cols.append(tf.squeeze(cc_input_var[cc], squeeze_dims=[1]))
 
     # with tf.scope_name('%s_in' % cc):
     #   cc_input_var[cc] = tf.placeholder(shape=[None, 1], dtype=tf.int32)
@@ -212,15 +201,16 @@ def get_deep_columns():
 
   return cols
 
+
 def get_wide_columns():
   cols = []
   for column in CONTINUOUS_COLUMNS:
-    cols.append(tf.contrib.layers.real_valued_column(column))
+    cols.append(tf.contrib.layers.real_valued_column(column, dimension=1, dtype=tf.float32))
 
-  age = tf.contrib.layers.real_valued_column('age')
-  cols.append(age)
-  cols.append(tf.contrib.layers.bucketized_column(age, boundaries=AGE_BINS))
+  # cols.append(age_column)
+  cols.append(tf.contrib.layers.bucketized_column(age_column, boundaries=AGE_BINS))
 
+  logger.info("Got wide columns %s", cols)
   return cols
 
 
@@ -270,7 +260,7 @@ def train_and_eval():
   for col in UNUSED_COLUMNS:
     df_base[col] = np.where(df_base[col].isnull(), 0, df_base[col])
 
-  logger.trace("Number of columns after removing nulls: %d (before: %d)", len(df_base.dropna(how='any', axis=0)), len(df_base))
+  logger.debug("Number of columns after removing nulls: %d (before: %d)", len(df_base.dropna(how='any', axis=0)), len(df_base))
 
   df_base[LABEL_COLUMN] = (
       df_base["isAlive"].apply(lambda x: x)).astype(int)
