@@ -225,7 +225,7 @@ def input_fn(df):
     k: tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
                        values=df[k].values,
                        shape=[df[k].size, 1])
-    for k in (CATEGORICAL_COLUMNS.keys() + BINARY_COLUMNS)
+    for k in (CATEGORICAL_COLUMNS.keys() + BINARY_COLUMNS + ['age'])
   }
   # Merges the two dictionaries into one.
   feature_cols = dict(continuous_cols)
@@ -286,9 +286,9 @@ def train_and_eval():
 
   m = build_estimator(model_dir)
   m.fit(
-    # input_fn=lambda: input_fn(df_base),
-    x=df_train,
-    y=y_train,
+    input_fn=lambda: input_fn(df_base),
+    # x=df_train,
+    # y=y_train,
     # snapshot_step=FLAGS.snapshot_steps,
     steps=FLAGS.train_steps
   )
