@@ -260,7 +260,7 @@ def train_and_eval():
   df_base = df_base.dropna(how='any', axis=0)
 
   df_base[LABEL_COLUMN] = (
-      df_base["isAlive"].apply(lambda x: x)).astype(np.float32)
+      df_base["isAlive"].apply(lambda x: x)).astype(int)
 
   X = df_base[COLUMNS_X]
   y = df_base[LABEL_COLUMN]
@@ -283,9 +283,9 @@ def train_and_eval():
 
   m = build_estimator(model_dir)
   m.fit(
-    input_fn=input_fn(df_base),
-    # x=df_train,
-    # y=y_train,
+    # input_fn=lambda: input_fn(df_base),
+    x=df_train,
+    y=y_train,
     # snapshot_step=FLAGS.snapshot_steps,
     steps=FLAGS.train_steps
   )
