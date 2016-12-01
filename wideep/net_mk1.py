@@ -123,6 +123,11 @@ CONTINUOUS_COLUMNS = [
     'dateOfBirth',
 ]
 
+UNUSED_COLUMNS = [
+  col
+  for col in COLUMNS
+  if col not in CONTINUOUS_COLUMNS and col not in BINARY_COLUMNS and col not in CATEGORICAL_COLUMN_NAMES
+]
 
 X = df_base[COLUMNS]
 y = df_base[LABEL_COLUMN]
@@ -183,7 +188,6 @@ def get_deep_columns():
                                                             keys=["0", "1"])
     )
 
-  
   for cc, cc_size in CATEGORICAL_COLUMNS.items():
     cc_input_var[cc] = tf.contrib.layers.sparse_column_with_hash_bucket(
       cc,
@@ -213,6 +217,10 @@ def get_wide_columns():
   for column in CONTINUOUS_COLUMNS:
     cols.append(tf.contrib.layers.real_valued_column(column))
 
+  age = tf.contrib.layers.real_valued_column('age')
+  cols.append(age)
+  cols.append(tf.contrib.layers.bucketized_column(age, boundaries=AGE_BINS))
+
   return cols
 
 
@@ -223,11 +231,12 @@ def input_fn(df):
   continuous_cols = {k: tf.constant(df[k].values) for k in CONTINUOUS_COLUMNS}
   # Creates a dictionary mapping from each categorical feature column name (k)
   # to the values of that column stored in a tf.SparseTensor.
-  categorical_cols = {k: tf.SparseTensor(
-      indices=[[i, 0] for i in range(df[k].size)],
-      values=df[k].values,
-      shape=[df[k].size, 1])
-                      for k in CATEGORICAL_COLUMNS}
+  categorical_cols = {
+    k: tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
+                       values=df[k].values,
+                       shape=[df[k].size, 1])
+    for k in (CATEGORICAL_COLUMNS.keys() + BINARY_COLUMNS)
+  }
   # Merges the two dictionaries into one.
   feature_cols = dict(continuous_cols)
   feature_cols.update(categorical_cols)
