@@ -256,8 +256,21 @@ def train_and_eval():
     skiprows=1,
     engine="python")
 
-  # Remove NaN elements
-  df_base = df_base.dropna(how='any', axis=0)
+  ## Remove NaN elements
+  # df_base = df_base.dropna(how='any', axis=0)
+
+  ## Fill NaN elements
+  for col in CATEGORICAL_COLUMN_NAMES:
+    df_base[col] = np.where(df_base[col].isnull(), 'NULL', df_base[col])
+  for col in BINARY_COLUMNS:
+    df_base[col] = np.where(df_base[col].isnull(), 0, df_base[col])
+  for col in CONTINUOUS_COLUMNS:
+    df_base[col] = np.where(df_base[col].isnull(), 0., df_base[col])
+
+  for col in UNUSED_COLUMNS:
+    df_base[col] = np.where(df_base[col].isnull(), 0, df_base[col])
+
+  logger.trace("Number of columns after removing nulls: %d (before: %d)", len(df_base.dropna(how='any', axis=0)), len(df_base))
 
   df_base[LABEL_COLUMN] = (
       df_base["isAlive"].apply(lambda x: x)).astype(int)
