@@ -262,7 +262,7 @@ def train_and_eval():
   df_base[LABEL_COLUMN] = (
       df_base["isAlive"].apply(lambda x: x)).astype(np.float32)
 
-  X = df_base[COLUMNS]
+  X = df_base[COLUMNS_X]
   y = df_base[LABEL_COLUMN]
 
   df_train, df_test, y_train, y_test = cross_validation.train_test_split(X, y, test_size=0.2, random_state=42)
