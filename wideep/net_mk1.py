@@ -106,6 +106,9 @@ BINARY_COLUMNS = [
     'isPopular',
 ]
 
+for col in BINARY_COLUMNS:
+  df_base[col] = df_base[col].astype(str)
+
 BUCKETIZED_COLUMNS_FILTER = ['age']
 
 CATEGORICAL_COLUMNS = {
@@ -117,7 +120,7 @@ CATEGORICAL_COLUMNS = {
 AGE_BINS = [ 0, 4, 8, 15, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 80, 65535 ]
 
 CONTINUOUS_COLUMNS = [
-  'isNoble',
+  'age',
   'popularity',
   'dateOfBirth',
 ]
@@ -172,14 +175,21 @@ def get_deep_columns():
 
   for cc in BINARY_COLUMNS:
     cols.append(
-      tf.contrib.layers.sparse_column_with_keys(column_name=cc,
-                                                            keys=["0", "1"])
+      tf.contrib.layers.embedding_column(
+        tf.contrib.layers.sparse_column_with_keys(
+          column_name=cc,
+          keys=["0", "1"],
+        ),
+        dimension=8)
     )
 
   for cc, cc_size in CATEGORICAL_COLUMNS.items():
-    cc_input_var[cc] = tf.contrib.layers.sparse_column_with_hash_bucket(
-      cc,
-      hash_bucket_size=cc_size,
+    cc_input_var[cc] = tf.contrib.layers.embedding_column(
+      tf.contrib.layers.sparse_column_with_hash_bucket(
+        cc,
+        hash_bucket_size=cc_size,
+      ),
+      dimension=8
     )
 
     cols.append(cc_input_var[cc])
@@ -208,7 +218,7 @@ def get_wide_columns():
     cols.append(tf.contrib.layers.real_valued_column(column, dimension=1, dtype=tf.float32))
 
   # cols.append(age_column)
-  cols.append(tf.contrib.layers.bucketized_column(age_column, boundaries=AGE_BINS))
+  # cols.append(tf.contrib.layers.bucketized_column(age_column, boundaries=AGE_BINS))
 
   logger.info("Got wide columns %s", cols)
   return cols
@@ -221,11 +231,18 @@ def input_fn(df):
   continuous_cols = {k: tf.constant(df[k].values) for k in CONTINUOUS_COLUMNS}
   # Creates a dictionary mapping from each categorical feature column name (k)
   # to the values of that column stored in a tf.SparseTensor.
+  def mp(tensor):
+    """Monkey-patch tensor to include get_shape"""
+    from tensorflow.python.framework import tensor_util
+    shape = tensor_util.constant_value_as_shape(tensor._shape)
+    tensor.get_shape = lambda: shape
+    return tensor
+
   categorical_cols = {
-    k: tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
+    k: mp(tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
                        values=df[k].values,
-                       shape=[df[k].size, 1])
-    for k in (CATEGORICAL_COLUMNS.keys() + BINARY_COLUMNS + ['age'])
+                       shape=[df[k].size, 1]))
+    for k in (CATEGORICAL_COLUMNS.keys() + BINARY_COLUMNS)
   }
   # Merges the two dictionaries into one.
   feature_cols = dict(continuous_cols)
@@ -253,7 +270,7 @@ def train_and_eval():
   for col in CATEGORICAL_COLUMN_NAMES:
     df_base[col] = np.where(df_base[col].isnull(), 'NULL', df_base[col])
   for col in BINARY_COLUMNS:
-    df_base[col] = np.where(df_base[col].isnull(), 0, df_base[col])
+    df_base[col] = np.where(df_base[col].isnull(), "0", df_base[col])
   for col in CONTINUOUS_COLUMNS:
     df_base[col] = np.where(df_base[col].isnull(), 0., df_base[col])
 
@@ -265,10 +282,7 @@ def train_and_eval():
   df_base[LABEL_COLUMN] = (
       df_base["isAlive"].apply(lambda x: x)).astype(int)
 
-  X = df_base[COLUMNS_X]
-  y = df_base[LABEL_COLUMN]
-
-  df_train, df_test, y_train, y_test = cross_validation.train_test_split(X, y, test_size=0.2, random_state=42)
+  df_train, df_test = cross_validation.train_test_split(df_base, test_size=0.2, random_state=42)
   # df_train = pd.read_csv(
   #     tf.gfile.Open(train_file_name),
   #     names=COLUMNS,
@@ -286,9 +300,7 @@ def train_and_eval():
 
   m = build_estimator(model_dir)
   m.fit(
-    input_fn=lambda: input_fn(df_base),
-    # x=df_train,
-    # y=y_train,
+    input_fn=lambda: input_fn(df_train),
     # snapshot_step=FLAGS.snapshot_steps,
     steps=FLAGS.train_steps
   )
