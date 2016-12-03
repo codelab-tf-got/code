@@ -68,10 +68,10 @@ model_name = "net_mk1"
 
 
 # Target column is plod, for Percentage Likelyhood Of Death
-LABEL_COLUMN = b'plod'
+LABEL_COLUMN = 'plod'
 
 # The columns in the dataset are the following:
-COLUMNS = b'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,dateOfDeath,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
+COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,dateOfDeath,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
 COLUMNS_X = [col for col in COLUMNS if col != LABEL_COLUMN]
 
 dataset_file_name = "../dataset/character-predictions.csv"
@@ -242,7 +242,7 @@ def input_fn(df):
     k: mp(tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
                        values=df[k].values,
                        shape=[df[k].size, 1]))
-    for k in (CATEGORICAL_COLUMNS.keys() + BINARY_COLUMNS)
+    for k in (list(CATEGORICAL_COLUMNS.keys()) + BINARY_COLUMNS)
   }
   # Merges the two dictionaries into one.
   feature_cols = dict(continuous_cols)
