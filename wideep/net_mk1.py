@@ -71,7 +71,7 @@ model_name = "net_mk1"
 LABEL_COLUMN = 'plod'
 
 # The columns in the dataset are the following:
-COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,dateOfDeath,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
+COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
 COLUMNS_X = [col for col in COLUMNS if col != LABEL_COLUMN]
 
 dataset_file_name = "../dataset/character-predictions.csv"
