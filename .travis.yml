@@ -10,12 +10,30 @@ matrix:
     - python: 2.7
       env: TF_BINARY_URL=https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-0.11.0-cp27-none-linux_x86_64.whl
 
+before_install:
+  - cd /tmp
+  - wget http://launchpadlibrarian.net/137699828/libc6_2.17-0ubuntu5_amd64.deb
+  - wget http://launchpadlibrarian.net/137699829/libc6-dev_2.17-0ubuntu5_amd64.deb
+  - wget http://launchpadlibrarian.net/156644476/libstdc++6_4.8.1-10ubuntu9_amd64.deb
+  - wget http://launchpadlibrarian.net/139418984/libstdc++-4.8-dev_4.8.0-6ubuntu1_amd64.deb
+  - mkdir /tmp/libc6_2.17
+  - cd -
+  - cd /tmp/libc6_2.17
+  - ar p ../libc6_2.17-0ubuntu5_amd64.deb data.tar.gz | tar zx
+  - ar p ../libc6-dev_2.17-0ubuntu5_amd64.deb data.tar.gz | tar zx
+  - ar p ../libstdc++6_4.8.1-10ubuntu9_amd64.deb data.tar.gz | tar zx
+  - ar p ../libstdc++-4.8-dev_4.8.0-6ubuntu1_amd64.deb data.tar.gz | tar zx
+  - cd -
+
 install:
   - pip install --upgrade pip
   - pip install --upgrade $TF_BINARY_URL
   - pip install --only-binary=numpy,scipy numpy scipy
   - pip install --only-binary=numpy,scipy -r requirements.txt
 
+
 script:
-  - cd wideep && python net_mk1.py
+  - cd wideep
+  - LD_LIBRARY_PATH=/tmp/libc6_2.17/lib/x86_64-linux-gnu/ /tmp/libc6_2.17/lib/x86_64-linux-gnu/ld-2.17.so ldd `which python` || true
+  - LD_LIBRARY_PATH=/tmp/libc6_2.17/lib/x86_64-linux-gnu/ /tmp/libc6_2.17/lib/x86_64-linux-gnu/ld-2.17.so `which python` net_mk1.py
   
