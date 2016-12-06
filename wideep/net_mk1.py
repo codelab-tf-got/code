@@ -67,8 +67,8 @@ model_name = "net_mk1"
 
 
 
-# Target column is plod, for Percentage Likelyhood Of Death
-LABEL_COLUMN = 'plod'
+# Target column is the actual isAlive variable
+LABEL_COLUMN = 'isAlive'
 
 # The columns in the dataset are the following:
 COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
@@ -280,7 +280,7 @@ def train_and_eval():
   logger.debug("Number of columns after removing nulls: %d (before: %d)", len(df_base.dropna(how='any', axis=0)), len(df_base))
 
   df_base[LABEL_COLUMN] = (
-      df_base["isAlive"].apply(lambda x: x)).astype(int)
+      df_base[LABEL_COLUMN].apply(lambda x: x)).astype(int)
 
   df_train, df_test = cross_validation.train_test_split(df_base, test_size=0.2, random_state=42)
   # df_train = pd.read_csv(
