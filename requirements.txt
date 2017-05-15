@@ -10,3 +10,4 @@ pbr==1.10.0
 protobuf==3.1.0
 python-dateutil==2.6.0
 pytz==2016.7
+scipy==0.19.0
