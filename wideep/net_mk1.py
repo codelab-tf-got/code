@@ -231,17 +231,11 @@ def input_fn(df):
   continuous_cols = {k: tf.constant(df[k].values) for k in CONTINUOUS_COLUMNS}
   # Creates a dictionary mapping from each categorical feature column name (k)
   # to the values of that column stored in a tf.SparseTensor.
-  def mp(tensor):
-    """Monkey-patch tensor to include get_shape"""
-    from tensorflow.python.framework import tensor_util
-    shape = tensor_util.constant_value_as_shape(tensor._shape)
-    tensor.get_shape = lambda: shape
-    return tensor
 
   categorical_cols = {
-    k: mp(tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
+    k: tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
                        values=df[k].values,
-                       shape=[df[k].size, 1]))
+                       dense_shape=[df[k].size, 1])
     for k in (list(CATEGORICAL_COLUMNS.keys()) + BINARY_COLUMNS)
   }
   # Merges the two dictionaries into one.
