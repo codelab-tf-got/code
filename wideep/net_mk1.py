@@ -49,34 +49,27 @@ flags.DEFINE_string("model_dir", "", "Base directory for output models.")
 flags.DEFINE_string("model_type", "wide_n_deep",
                     "Valid model types: {'wide', 'deep', 'wide_n_deep'}.")
 flags.DEFINE_integer("train_steps", 200, "Number of training steps.")
-# flags.DEFINE_integer("snapshot_steps", 10, "Number of steps between snapshots.")
-flags.DEFINE_string(
-    "train_data",
-    "",
-    "Path to the training data.")
-flags.DEFINE_string(
-    "test_data",
-    "",
-    "Path to the test data.")
-
 flags.DEFINE_float("wide_learning_rate", 0.001, "learning rate for the wide part of the model")
 flags.DEFINE_float("deep_learning_rate", 0.003, "learning rate for the deep part of the model")
 
 learning_rate = [FLAGS.wide_learning_rate, FLAGS.deep_learning_rate]
-model_name = "net_mk1"
+model_name = "net_mk2"
 
 
+
+##############################################################################
+## Column definitions
+##############################################################################
+
+# The columns in the dataset are the following:
+COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
 
 # Target column is the actual isAlive variable
 LABEL_COLUMN = 'isAlive'
 
-# The columns in the dataset are the following:
-COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
 COLUMNS_X = [col for col in COLUMNS if col != LABEL_COLUMN]
 
 dataset_file_name = "../dataset/character-predictions.csv"
-
-df_base = pd.read_csv(dataset_file_name, sep=',',) # names=COLUMNS, skipinitialspace=True, skiprows=1)
 
 CATEGORICAL_COLUMN_NAMES = [
     'male',
@@ -106,18 +99,15 @@ BINARY_COLUMNS = [
     'isPopular',
 ]
 
+df_base = pd.read_csv(dataset_file_name, sep=',', names=COLUMNS, skipinitialspace=True, skiprows=1)
+
 for col in BINARY_COLUMNS:
   df_base[col] = df_base[col].astype(str)
-
-BUCKETIZED_COLUMNS_FILTER = ['age']
 
 CATEGORICAL_COLUMNS = {
     col: len(df_base[col].unique()) + 1
     for col in CATEGORICAL_COLUMN_NAMES
 }
-
-# TODO: Revise bins for GoT
-AGE_BINS = [ 0, 4, 8, 15, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 80, 65535 ]
 
 CONTINUOUS_COLUMNS = [
   'age',
@@ -128,21 +118,37 @@ CONTINUOUS_COLUMNS = [
 UNUSED_COLUMNS = [
   col
   for col in COLUMNS
-  if col not in CONTINUOUS_COLUMNS and col not in BINARY_COLUMNS and col not in CATEGORICAL_COLUMN_NAMES
+  if col not in CONTINUOUS_COLUMNS \
+  and col not in BINARY_COLUMNS \
+  and col not in CATEGORICAL_COLUMN_NAMES
 ]
+
+##############################################################################
+## Split train/test data
+##############################################################################
 
 X = df_base[COLUMNS]
 y = df_base[LABEL_COLUMN]
 
 df_train, df_test, y_train, y_test = cross_validation.train_test_split(X, y, test_size=0.2, random_state=42)
 
+# Get the classes of the target column (in this case: 1 or 0)
 LABEL_COLUMN_CLASSES = y.unique()
 
-dataset_file_name = "../dataset/character-predictions.csv"
 
+##############################################################################
+## General estimator builder function
+## The wide/deep part construction is below. This gathers both parts
+## and joins the model into a single classifier.
+##############################################################################
 
 def build_estimator(model_dir):
-  """Build an estimator."""
+  """General estimator builder function.
+  
+  The wide/deep part construction is below. This gathers both parts
+  and joins the model into a single classifier.
+
+  """
 
   logger.info("Learning rates (wide, deep) = %s", learning_rate)
 
@@ -169,6 +175,13 @@ def build_estimator(model_dir):
 age_column = tf.contrib.layers.real_valued_column('age', dimension=1, dtype=tf.int32)
 
 def get_deep_columns():
+  """Obtains the deep columns of the model. 
+
+  In our model, these are the binary columns (which are embedded with
+  keys "0" and "1") and the categorical columns, which are embedded as
+  8-dimensional sparse columns in hash buckets.
+
+  """
   cc_input_var = {}
   cc_embed_var = {}
   cols = [] + [age_column]
@@ -193,32 +206,18 @@ def get_deep_columns():
     )
 
     cols.append(cc_input_var[cc])
-    # cols.append(tf.squeeze(cc_input_var[cc], squeeze_dims=[1]))
-
-    # with tf.scope_name('%s_in' % cc):
-    #   cc_input_var[cc] = tf.placeholder(shape=[None, 1], dtype=tf.int32)
-    # cc_embed_var[cc] = tflearn.layers.embedding_ops.embedding(cc_input_var[cc], cc_size, 10, name='deep_%s_embed' % cc)
-    # logger.debug("%s_embed = %s", cc, cc_embed_var)
-    # 
-    # cols.append(tf.squeeze(cc_embed_var[cc], squeeze_dims=[1], name="%s_squeeze" % cc))
-
-  # age_buckets = tf.contrib.layers.bucketized_column(age,
-  #                                                   boundaries=[
-  #                                                       18, 25, 30, 35, 40, 45,
-  #                                                       50, 55, 60, 65
-  #                                                   ])
-  ##Crossed clomuns come in pairs or can I combined more??
-
   return cols
 
 
 def get_wide_columns():
+  """
+  Get wide columns for our model.
+
+  In this case, wide columns are just the continuous columns.
+  """
   cols = []
   for column in CONTINUOUS_COLUMNS:
     cols.append(tf.contrib.layers.real_valued_column(column, dimension=1, dtype=tf.float32))
-
-  # cols.append(age_column)
-  # cols.append(tf.contrib.layers.bucketized_column(age_column, boundaries=AGE_BINS))
 
   logger.info("Got wide columns %s", cols)
   return cols
@@ -250,12 +249,12 @@ def input_fn(df):
 def train_and_eval():
   """Train and evaluate the model."""
   
-  df_base = pd.read_csv(
-    tf.gfile.Open(dataset_file_name),
-    names=COLUMNS,
-    skipinitialspace=True,
-    skiprows=1,
-    engine="python")
+  # df_base = pd.read_csv(
+  #   tf.gfile.Open(dataset_file_name),
+  #   names=COLUMNS,
+  #   skipinitialspace=True,
+  #   skiprows=1,
+  #   engine="python")
 
   ## Remove NaN elements
   # df_base = df_base.dropna(how='any', axis=0)
