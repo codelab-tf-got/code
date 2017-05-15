@@ -64,20 +64,19 @@ model_name = "net_mk2"
 # The columns in the dataset are the following:
 COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
 
+COLUMNS = 'S.No,name,title,male,culture,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,numDeadRelations,boolDeadRelations,popularity,isAlive'.split(',')
+
 # Target column is the actual isAlive variable
 LABEL_COLUMN = 'isAlive'
 
 COLUMNS_X = [col for col in COLUMNS if col != LABEL_COLUMN]
 
-dataset_file_name = "../dataset/character-predictions.csv"
+dataset_file_name = "./GoT_dataset.csv"
 
 CATEGORICAL_COLUMN_NAMES = [
     'male',
     'culture',
-    'mother',
-    'father',
     'title',
-    'heir',
     'house',
     'spouse',
     'numDeadRelations',
@@ -96,7 +95,6 @@ BINARY_COLUMNS = [
     'isAliveSpouse',
     'isMarried',
     'isNoble',
-    'isPopular',
 ]
 
 df_base = pd.read_csv(dataset_file_name, sep=',', names=COLUMNS, skipinitialspace=True, skiprows=1)
@@ -110,9 +108,7 @@ CATEGORICAL_COLUMNS = {
 }
 
 CONTINUOUS_COLUMNS = [
-  'age',
   'popularity',
-  'dateOfBirth',
 ]
 
 UNUSED_COLUMNS = [
@@ -172,8 +168,6 @@ def build_estimator(model_dir):
   return m
 
 
-age_column = tf.contrib.layers.real_valued_column('age', dimension=1, dtype=tf.int32)
-
 def get_deep_columns():
   """Obtains the deep columns of the model. 
 
@@ -184,7 +178,7 @@ def get_deep_columns():
   """
   cc_input_var = {}
   cc_embed_var = {}
-  cols = [] + [age_column]
+  cols = []
 
   for cc in BINARY_COLUMNS:
     cols.append(
