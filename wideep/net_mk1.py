@@ -11,50 +11,43 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-#Import sklearn metrics for the accuracy 
-from sklearn.metrics import accuracy_score
-from sklearn import cross_validation # to split the train/test cases
 
-import tempfile
-from six.moves import urllib
+import argparse, sys, tempfile
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from tensorflow.contrib.learn.python.learn import learn_runner
+from tensorflow.contrib.learn.python.learn.datasets import base
+from tensorflow.contrib.learn.python.learn.utils import input_fn_utils
+from tensorflow.contrib.learn.python.learn.utils import saved_model_export_utils
+
+from sklearn import cross_validation # to split the train/test cases
 
 
 ## Begin set up logging
 import logging
-
 logger = logging.getLogger('net_mk1')
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+# logger.setLevel(logging.DEBUG)
+# ch = logging.StreamHandler()
+# ch.setLevel(logging.DEBUG)
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# ch.setFormatter(formatter)
+# logger.addHandler(ch)
 ## End set up logging
 
 
 # Get some useful information from TensorFlow's internals
 # tf.logging.set_verbosity(tf.logging.WARN)
-tf.logging.set_verbosity(tf.logging.INFO)
+# tf.logging.set_verbosity(tf.logging.INFO)
 
+FLAGS = None
 
-"""Flags are a TensorFlow internal util to define command-line parameters."""
-flags = tf.app.flags
-FLAGS = flags.FLAGS
-
-flags.DEFINE_string("model_dir", "", "Base directory for output models.")
-flags.DEFINE_string("model_type", "wide_n_deep",
-                    "Valid model types: {'wide', 'deep', 'wide_n_deep'}.")
-flags.DEFINE_integer("train_steps", 200, "Number of training steps.")
-flags.DEFINE_float("wide_learning_rate", 0.001, "learning rate for the wide part of the model")
-flags.DEFINE_float("deep_learning_rate", 0.003, "learning rate for the deep part of the model")
-
-learning_rate = [FLAGS.wide_learning_rate, FLAGS.deep_learning_rate]
 model_name = "net_mk2"
 
+def only_existing(l, haystack):
+  s = set(haystack)
+  return [item for item in l if item in s]
 
 
 ##############################################################################
@@ -64,6 +57,10 @@ model_name = "net_mk2"
 # The columns in the dataset are the following:
 COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
 
+# COLUMNS = 'S.No,name,title,male,culture,house,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,numDeadRelations,boolDeadRelations,popularity,isAlive'.split(',')
+# dataset_file_name = "./GoT_dataset.csv"
+
+
 # Target column is the actual isAlive variable
 LABEL_COLUMN = 'isAlive'
 
@@ -71,7 +68,8 @@ COLUMNS_X = [col for col in COLUMNS if col != LABEL_COLUMN]
 
 dataset_file_name = "../dataset/character-predictions.csv"
 
-CATEGORICAL_COLUMN_NAMES = [
+
+CATEGORICAL_COLUMN_NAMES = only_existing([
     'male',
     'culture',
     'mother',
@@ -82,9 +80,9 @@ CATEGORICAL_COLUMN_NAMES = [
     'spouse',
     'numDeadRelations',
     'boolDeadRelations',
-]
+], COLUMNS)
 
-BINARY_COLUMNS = [
+BINARY_COLUMNS = only_existing([
     'book1',
     'book2',
     'book3',
@@ -97,7 +95,7 @@ BINARY_COLUMNS = [
     'isMarried',
     'isNoble',
     'isPopular',
-]
+], COLUMNS)
 
 df_base = pd.read_csv(dataset_file_name, sep=',', names=COLUMNS, skipinitialspace=True, skiprows=1)
 
@@ -109,70 +107,31 @@ CATEGORICAL_COLUMNS = {
     for col in CATEGORICAL_COLUMN_NAMES
 }
 
-CONTINUOUS_COLUMNS = [
+CONTINUOUS_COLUMNS = only_existing([
   'age',
   'popularity',
   'dateOfBirth',
+], COLUMNS)
+
+FEATURE_COLUMNS = [
+  col for col in COLUMNS
+  if col in CONTINUOUS_COLUMNS \
+  or col in BINARY_COLUMNS \
+  or col in CATEGORICAL_COLUMN_NAMES
 ]
 
 UNUSED_COLUMNS = [
   col
   for col in COLUMNS
-  if col not in CONTINUOUS_COLUMNS \
-  and col not in BINARY_COLUMNS \
-  and col not in CATEGORICAL_COLUMN_NAMES
+  if col != LABEL_COLUMN \
+  and col not in FEATURE_COLUMNS
 ]
 
-##############################################################################
-## Split train/test data
-##############################################################################
-
-X = df_base[COLUMNS]
-y = df_base[LABEL_COLUMN]
-
-df_train, df_test, y_train, y_test = cross_validation.train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Get the classes of the target column (in this case: 1 or 0)
-LABEL_COLUMN_CLASSES = y.unique()
+print("We are not using columns: %s" % UNUSED_COLUMNS)
 
 
-##############################################################################
-## General estimator builder function
-## The wide/deep part construction is below. This gathers both parts
-## and joins the model into a single classifier.
-##############################################################################
-
-def build_estimator(model_dir):
-  """General estimator builder function.
-  
-  The wide/deep part construction is below. This gathers both parts
-  and joins the model into a single classifier.
-
-  """
-
-  logger.info("Learning rates (wide, deep) = %s", learning_rate)
-
-  wide_columns = get_wide_columns()
-  deep_columns = get_deep_columns()
-
-  ##From here, reading the code beyond i've change anything from the tutorial 
-  if FLAGS.model_type == "wide":
-    m = tf.contrib.learn.LinearClassifier(model_dir=model_dir,
-                                          feature_columns=wide_columns)
-  elif FLAGS.model_type == "deep":
-    m = tf.contrib.learn.DNNClassifier(model_dir=model_dir,
-                                       feature_columns=deep_columns,
-                                       hidden_units=[100, 50])
-  else:
-    m = tf.contrib.learn.DNNLinearCombinedClassifier(
-        model_dir=model_dir,
-        linear_feature_columns=wide_columns,
-        dnn_feature_columns=deep_columns,
-        dnn_hidden_units=[100, 50])
-  return m
-
-
-age_column = tf.contrib.layers.real_valued_column('age', dimension=1, dtype=tf.int32)
+# preset_deep_columns = [tf.contrib.layers.real_valued_column('age', dimension=1, dtype=tf.int32)]
+preset_deep_columns = []
 
 def get_deep_columns():
   """Obtains the deep columns of the model. 
@@ -184,15 +143,15 @@ def get_deep_columns():
   """
   cc_input_var = {}
   cc_embed_var = {}
-  cols = [] + [age_column]
+  cols = preset_deep_columns
 
   for cc in BINARY_COLUMNS:
     cols.append(
       tf.contrib.layers.embedding_column(
-        tf.contrib.layers.sparse_column_with_keys(
-          column_name=cc,
-          keys=["0", "1"],
-        ),
+          tf.contrib.layers.sparse_column_with_keys(
+            column_name=cc,
+            keys=["0", "1"],
+          ),
         dimension=8)
     )
 
@@ -206,6 +165,10 @@ def get_deep_columns():
     )
 
     cols.append(cc_input_var[cc])
+
+  for column in CONTINUOUS_COLUMNS:
+    cols.append(tf.contrib.layers.real_valued_column(column, dimension=1, dtype=tf.float32))
+
   return cols
 
 
@@ -221,6 +184,49 @@ def get_wide_columns():
 
   logger.info("Got wide columns %s", cols)
   return cols
+
+
+##############################################################################
+## Split train/test data
+##############################################################################
+X = df_base[COLUMNS]
+y = df_base[LABEL_COLUMN]
+
+# Get the classes of the target column (in this case: 1 or 0)
+LABEL_COLUMN_CLASSES = y.unique()
+
+##############################################################################
+## General estimator builder function
+## The wide/deep part construction is below. This gathers both parts
+## and joins the model into a single classifier.
+##############################################################################
+def build_estimator(model_dir):
+  """General estimator builder function.
+  
+  The wide/deep part construction is below. This gathers both parts
+  and joins the model into a single classifier.
+
+  """
+  wide_columns = get_wide_columns()
+  deep_columns = get_deep_columns()
+
+  ##From here, reading the code beyond i've change anything from the tutorial 
+  if FLAGS.model_type == "wide":
+    m = tf.contrib.learn.LinearClassifier(model_dir=model_dir,
+                                          feature_columns=wide_columns)
+  elif FLAGS.model_type == "deep":
+    m = tf.contrib.learn.DNNClassifier(model_dir=model_dir,
+                                       feature_columns=deep_columns,
+                                       hidden_units=[100, 50])
+  else:
+    m = tf.contrib.learn.DNNLinearCombinedClassifier(
+      model_dir=model_dir,
+      linear_feature_columns=wide_columns,
+      dnn_feature_columns=deep_columns,
+      dnn_hidden_units=[100, 50],
+      fix_global_step_increment_bug = True,
+    )
+  return m
 
 
 def input_fn(df):
@@ -246,19 +252,76 @@ def input_fn(df):
   return feature_cols, label
 
 
-def train_and_eval():
-  """Train and evaluate the model."""
-  
-  # df_base = pd.read_csv(
-  #   tf.gfile.Open(dataset_file_name),
-  #   names=COLUMNS,
-  #   skipinitialspace=True,
-  #   skiprows=1,
-  #   engine="python")
+def generate_input_fn(df):
+  def _input_fn():
+    """Input builder function."""
+    # Creates a dictionary mapping from each continuous feature column name (k) to
+    # the values of that column stored in a constant Tensor.
+    continuous_cols = {k: tf.constant(df[k].values) for k in CONTINUOUS_COLUMNS}
 
-  ## Remove NaN elements
-  # df_base = df_base.dropna(how='any', axis=0)
+    # Creates a dictionary mapping from each categorical feature column name (k)
+    # to the values of that column stored in a tf.SparseTensor.
+    categorical_cols = {
+      k: tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
+                         values=df[k].values,
+                         dense_shape=[df[k].size, 1])
+      for k in (list(CATEGORICAL_COLUMNS.keys()) + BINARY_COLUMNS)
+    }
 
+    # Merges the two dictionaries into one.
+    feature_cols = dict(continuous_cols)
+    feature_cols.update(categorical_cols)
+
+    # Converts the label column into a constant Tensor.
+    label = tf.constant(df[LABEL_COLUMN].values)
+
+    # Returns the feature columns and the label.
+    return feature_cols, label
+  return _input_fn
+
+
+def column_to_dtype(column):
+  if column in CATEGORICAL_COLUMNS \
+     or column in BINARY_COLUMNS:
+    return tf.string
+  else:
+    return tf.float32
+
+def serving_input_fn():
+  feature_placeholders = {
+    column: tf.placeholder(column_to_dtype(column), [None])
+    for column in FEATURE_COLUMNS
+  }
+
+  features = {
+    key: tf.expand_dims(tensor, -1)
+    for key, tensor in feature_placeholders.items()
+  }
+
+  return input_fn_utils.InputFnOps(
+    features,
+    None,
+    feature_placeholders
+  )
+
+def generate_experiment(output_dir, df_train, df_test):
+  def _experiment_fn(output_dir):
+    my_model = build_estimator(output_dir)
+    experiment = tf.contrib.learn.Experiment(
+      my_model,
+      train_input_fn=generate_input_fn(df_train),
+      eval_input_fn=generate_input_fn(df_test),
+      train_steps=FLAGS.steps,
+      export_strategies=[saved_model_export_utils.make_export_strategy(
+        serving_input_fn,
+        default_output_alternative_key=None
+      )]
+    )
+    return experiment
+  return _experiment_fn
+      
+
+def fill_dataframe(df_base):
   ## Fill NaN elements
   for col in CATEGORICAL_COLUMN_NAMES:
     df_base[col] = np.where(df_base[col].isnull(), 'NULL', df_base[col])
@@ -270,36 +333,40 @@ def train_and_eval():
   for col in UNUSED_COLUMNS:
     df_base[col] = np.where(df_base[col].isnull(), 0, df_base[col])
 
-  logger.debug("Number of columns after removing nulls: %d (before: %d)", len(df_base.dropna(how='any', axis=0)), len(df_base))
+def train_and_eval(job_dir=None):
+  """Train and evaluate the model."""
+  fill_dataframe(df_base)
+  logger.debug("Number of columns after removing nulls: %d (before: %d)",
+               len(df_base.dropna(how='any', axis=0)),
+               len(df_base))
 
   df_base[LABEL_COLUMN] = (
       df_base[LABEL_COLUMN].apply(lambda x: x)).astype(int)
 
   df_train, df_test = cross_validation.train_test_split(df_base, test_size=0.2, random_state=42)
-  # df_train = pd.read_csv(
-  #     tf.gfile.Open(train_file_name),
-  #     names=COLUMNS,
-  #     skipinitialspace=True,
-  #     engine="python")
-  # df_test = pd.read_csv(
-  #     tf.gfile.Open(test_file_name),
-  #     names=COLUMNS,
-  #     skipinitialspace=True,
-  #     skiprows=1,
-  #     engine="python")
 
   model_dir = tempfile.mkdtemp() if not FLAGS.model_dir else FLAGS.model_dir
   print("model directory = %s" % model_dir)
 
-  m = build_estimator(model_dir)
-  m.fit(
-    input_fn=lambda: input_fn(df_train),
-    # snapshot_step=FLAGS.snapshot_steps,
-    steps=FLAGS.train_steps
-  )
-  results = m.evaluate(input_fn=lambda: input_fn(df_test), steps=1)
-  for key in sorted(results):
-    print("%s: %s" % (key, results[key]))
+  if FLAGS.training_mode == 'manual':
+    m = build_estimator(model_dir)
+    m.fit(
+      input_fn=lambda: input_fn(df_train),
+      steps=FLAGS.steps
+    )
+    results = m.evaluate(input_fn=lambda: input_fn(df_test), steps=1)
+    for key in sorted(results):
+      print("%s: %s" % (key, results[key]))
+
+  elif FLAGS.training_mode == 'learn_runner':
+    experiment_fn = generate_experiment(
+      model_dir, df_train, df_test
+    )
+
+    metrics, output_folder = learn_runner.run(experiment_fn, model_dir)
+    for key in sorted(metrics):
+      print("%s: %s" % (key, metrics[key]))
+    print('Model exported to {}'.format(output_folder))
 
 
 def main(_):
@@ -307,4 +374,31 @@ def main(_):
 
 
 if __name__ == "__main__":
-  tf.app.run()
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+    "--training_mode",
+    type=str,
+    default="learn_runner",
+    help="Mode to use for training (learn_runner or manual).",
+  )
+  parser.add_argument(
+    "--model_dir",
+    type=str,
+    default="",
+    help="Base directory for output models.",
+  )
+  parser.add_argument(
+    "--model_type",
+    type=str,
+    default="wide_n_deep",
+    help="Valid model types: {'wide', 'deep', 'wide_n_deep'}.",
+  )
+  parser.add_argument(
+    "--steps",
+    type=int,
+    default=200,
+    help="Number of training steps.",
+  )
+
+  FLAGS, unparsed = parser.parse_known_args()
+  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
