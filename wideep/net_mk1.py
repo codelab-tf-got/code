@@ -29,7 +29,8 @@ from tensorflow.contrib.learn.python.learn.utils import saved_model_export_utils
 from sklearn import cross_validation # to split the train/test cases
 
 
-## Begin set up logging
+## Uncomment the logging lines to see logs in the console
+## to get to know better what this code does.
 import logging
 logger = logging.getLogger('net_mk1')
 # logger.setLevel(logging.DEBUG)
@@ -58,6 +59,18 @@ def only_existing(l, haystack):
   return [item for item in l if item in s]
 
 
+def get_dataset(filename, local_path='../dataset'):
+  """
+  Downloads a dataset for this codelab.
+  The buckets here are managed by @ssice.
+  """
+  gcs_base = 'https://storage.googleapis.com/'
+  gcs_path = 'codelab-got.appspot.com/dataset/'
+  return base.maybe_download(
+    filename, local_path, gcs_base + gcs_path + filename
+  )
+
+
 ##############################################################################
 ## Column definitions
 ##############################################################################
@@ -65,16 +78,18 @@ def only_existing(l, haystack):
 # The columns in the dataset are the following:
 COLUMNS = 'S.No,actual,pred,alive,plod,name,title,male,culture,dateOfBirth,mother,father,heir,house,spouse,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,age,numDeadRelations,boolDeadRelations,isPopular,popularity,isAlive'.split(',')
 
+dataset_file_name = get_dataset('character-predictions.csv', '../dataset')
+
+
+## :: UNCOMMENT for use in the alternative dataset ::
 # COLUMNS = 'S.No,name,title,male,culture,house,book1,book2,book3,book4,book5,isAliveMother,isAliveFather,isAliveHeir,isAliveSpouse,isMarried,isNoble,numDeadRelations,boolDeadRelations,popularity,isAlive'.split(',')
-# dataset_file_name = "./GoT_dataset.csv"
+# dataset_file_name = get_dataset('character-curated.csv', '../dataset')
 
 
 # Target column is the actual isAlive variable
 LABEL_COLUMN = 'isAlive'
 
 COLUMNS_X = [col for col in COLUMNS if col != LABEL_COLUMN]
-
-dataset_file_name = "../dataset/character-predictions.csv"
 
 
 CATEGORICAL_COLUMN_NAMES = only_existing([
@@ -290,6 +305,8 @@ def generate_input_fn(df):
 
 
 def column_to_dtype(column):
+  if column == LABEL_COLUMN:
+    return tf.int32
   if column in CATEGORICAL_COLUMNS \
      or column in BINARY_COLUMNS:
     return tf.string
