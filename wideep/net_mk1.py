@@ -41,7 +41,8 @@ logger = logging.getLogger('net_mk1')
 ## End set up logging
 
 
-# Get some useful information from TensorFlow's internals
+# Stop tensorflow from getting chatty with us
+tf.logging.set_verbosity(tf.logging.ERROR)
 # tf.logging.set_verbosity(tf.logging.WARN)
 # tf.logging.set_verbosity(tf.logging.INFO)
 
@@ -50,6 +51,9 @@ FLAGS = None
 model_name = "net_mk2"
 
 def only_existing(l, haystack):
+  """
+  Helper to filter elements not already on the haystack in O(n)
+  """
   s = set(haystack)
   return [item for item in l if item in s]
 
@@ -101,16 +105,6 @@ BINARY_COLUMNS = only_existing([
     'isPopular',
 ], COLUMNS)
 
-df_base = pd.read_csv(dataset_file_name, sep=',', names=COLUMNS, skipinitialspace=True, skiprows=1)
-
-for col in BINARY_COLUMNS:
-  df_base[col] = df_base[col].astype(str)
-
-CATEGORICAL_COLUMNS = {
-    col: len(df_base[col].unique()) + 1
-    for col in CATEGORICAL_COLUMN_NAMES
-}
-
 CONTINUOUS_COLUMNS = only_existing([
   'age',
   'popularity',
@@ -132,6 +126,23 @@ UNUSED_COLUMNS = [
 ]
 
 print("We are not using columns: %s" % UNUSED_COLUMNS)
+
+
+# Load the base dataframe
+df_base = pd.read_csv(dataset_file_name, sep=',', names=COLUMNS, skipinitialspace=True, skiprows=1)
+
+
+# We re-type the binary columns so that they are strings
+for col in BINARY_COLUMNS:
+  df_base[col] = df_base[col].astype(str)
+
+
+# We get, for each categorical column, the number of unique elements
+# it has.
+CATEGORICAL_COLUMNS = {
+    col: len(df_base[col].unique()) + 1
+    for col in CATEGORICAL_COLUMN_NAMES
+}
 
 
 # preset_deep_columns = [tf.contrib.layers.real_valued_column('age', dimension=1, dtype=tf.int32)]
@@ -191,15 +202,6 @@ def get_wide_columns():
 
 
 ##############################################################################
-## Split train/test data
-##############################################################################
-X = df_base[COLUMNS]
-y = df_base[LABEL_COLUMN]
-
-# Get the classes of the target column (in this case: 1 or 0)
-LABEL_COLUMN_CLASSES = y.unique()
-
-##############################################################################
 ## General estimator builder function
 ## The wide/deep part construction is below. This gathers both parts
 ## and joins the model into a single classifier.
@@ -214,7 +216,6 @@ def build_estimator(model_dir):
   wide_columns = get_wide_columns()
   deep_columns = get_deep_columns()
 
-  ##From here, reading the code beyond i've change anything from the tutorial 
   if FLAGS.model_type == "wide":
     m = tf.contrib.learn.LinearClassifier(model_dir=model_dir,
                                           feature_columns=wide_columns)
@@ -241,6 +242,10 @@ def input_fn(df):
   # Creates a dictionary mapping from each categorical feature column name (k)
   # to the values of that column stored in a tf.SparseTensor.
 
+  """
+  Categorical columns go into sparse tensors because there are just
+  sparse values here, and using a dense tensor would be a waste of resources
+  """
   categorical_cols = {
     k: tf.SparseTensor(indices=[[i, 0] for i in range(df[k].size)],
                        values=df[k].values,
@@ -326,7 +331,11 @@ def generate_experiment(output_dir, df_train, df_test):
       
 
 def fill_dataframe(df_base):
-  ## Fill NaN elements
+  """
+  Fill with a NaN element of the correct type to have a valid label
+  to use in the neuron pipeline
+  """
+
   for col in CATEGORICAL_COLUMN_NAMES:
     df_base[col] = np.where(df_base[col].isnull(), 'NULL', df_base[col])
   for col in BINARY_COLUMNS:
@@ -336,6 +345,7 @@ def fill_dataframe(df_base):
 
   for col in UNUSED_COLUMNS:
     df_base[col] = np.where(df_base[col].isnull(), 0, df_base[col])
+
 
 def train_and_eval(job_dir=None):
   """Train and evaluate the model."""
