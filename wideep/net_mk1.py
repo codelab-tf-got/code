@@ -1,9 +1,13 @@
+# Copyright 2016 The TF Codelab Contributors. All Rights Reserved.
 # Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 #   http://www.apache.org/licenses/LICENSE-2.0
 # 
-# This code is for DEVFEST GDGSpain using character prediction from Tensorflow
+# This code was originaflly presented at GDGSpain DevFest
+# using character prediction from Tensorflow
 # https://github.com/bigpress/gameofthrones/blob/master/character-predictions.csv
 #
+# Latest version is always available at: https://github.com/codelab-tf-got/code/
+# Codelab test is available at: https://codelab-tf-cot.github.io
 
 # ==============================================================================
 
