@@ -242,8 +242,12 @@ def build_estimator(model_dir):
     m = tf.contrib.learn.DNNLinearCombinedClassifier(
       model_dir=model_dir,
       linear_feature_columns=wide_columns,
+      linear_optimizer=None, ## WATCH: Linear optimizer. By default, FTRL
       dnn_feature_columns=deep_columns,
-      dnn_hidden_units=[100, 50],
+      dnn_activation_fn=None, ## WATCH: Activation function for DNN (default: relu)
+      dnn_hidden_units=[100, 50], ## WATCH: Hidden units for the DNN part
+      dnn_dropout=None, ## WATCH: Dropout for the DNN
+      dnn_optimizer=None, ## WATCH: Optimizer for DNN (Adagrad by default)
       fix_global_step_increment_bug = True,
     )
   return m
