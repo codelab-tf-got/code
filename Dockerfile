@@ -1,8 +1,8 @@
-FROM tensorflow/tensorflow:latest-py3
+FROM tensorflow/tensorflow:latest
 
 WORKDIR /code
 ADD requirements.txt /code
-RUN pip3 install -r requirements.txt 
+RUN pip install -r requirements.txt 
 
 ADD dataset /code/dataset
 ADD wideep /code/wideep
