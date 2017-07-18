@@ -9,4 +9,4 @@ ADD wideep /code/wideep
 ADD launch.sh /code
 ADD setup.py /code
 
-CMD ["python", "./wideep/net_mk1.py"]
+ENTRYPOINT ["python", "./wideep/net_mk1.py"]
